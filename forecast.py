@@ -19,7 +19,9 @@ LAT, LON = -6.2088, 106.8456          # central Jakarta
 START = "2023-01-01"
 END = (date.today() - timedelta(days=2)).isoformat()
 HORIZONS = [1, 3, 6, 12, 24]
-STATION_ID = None                     # OpenAQ sensor id to force; None = pick longest history
+# Jakarta South, ~75% hourly coverage 2022-10 -> 2025-11. Longest-span pick
+# (None) chose Jakarta Central, which is ~83% empty after 2023 -- check coverage.
+STATION_ID = 5077558
 DATA = Path(__file__).parent / "data"
 DATA.mkdir(exist_ok=True)
 
@@ -61,16 +63,20 @@ def fetch_openaq(key):
             print(f"  sensor {sid:>8}  {name:<35} {f} -> {l}")
         sensor = cands[0][1]
 
-    rows, page = [], 1
-    while True:
-        r = s.get(f"https://api.openaq.org/v3/sensors/{sensor}/hours",
-                  params={"datetime_from": START, "datetime_to": END, "limit": 1000, "page": page})
+    # 30-day windows (<= 720 rows, one page each) -- deep paging 500s on OpenAQ.
+    rows = []
+    edges = pd.date_range(START, END, freq="30D").append(pd.DatetimeIndex([END]))
+    for a, b in zip(edges[:-1], edges[1:]):
+        for attempt in range(4):
+            r = s.get(f"https://api.openaq.org/v3/sensors/{sensor}/hours",
+                      params={"datetime_from": a.isoformat(), "datetime_to": b.isoformat(), "limit": 1000},
+                      timeout=60)
+            if r.status_code < 500 and r.status_code != 429:
+                break
+            time.sleep(5 * (attempt + 1))
         r.raise_for_status()
-        res = r.json()["results"]
-        rows += [(m["period"]["datetimeFrom"]["utc"], m["value"]) for m in res]
-        if len(res) < 1000:
-            break
-        page += 1
+        rows += [(m["period"]["datetimeFrom"]["utc"], m["value"]) for m in r.json()["results"]]
+        print(f"  {a:%Y-%m-%d}: {len(rows)} hours so far", end="\r")
         time.sleep(1.1)               # free tier: 60 req/min
     df = pd.DataFrame(rows, columns=["time", "pm25"])
     df["time"] = pd.to_datetime(df["time"], utc=True).dt.tz_localize(None).dt.floor("h")
