@@ -1,0 +1,5 @@
+lightgbm>=4.7
+scikit-learn
+pandas
+numpy
+requests
