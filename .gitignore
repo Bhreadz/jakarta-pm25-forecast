@@ -1,2 +1,4 @@
-data/
+data/*
+!data/SOURCES.md
 __pycache__/
+.venv/
