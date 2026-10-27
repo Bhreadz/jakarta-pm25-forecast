@@ -4,7 +4,7 @@
 [2025 official vs predicted](https://bhreadz.github.io/jakarta-pm25-forecast/outputs/heatmap_2025_compare.html) ·
 [model comparison chart](https://bhreadz.github.io/jakarta-pm25-forecast/outputs/model_comparison.png)
 
-A solo continuation of [Breathability](https://github.com/SycthePlays/Breathability), a team
+This is a solo continuation of [Breathability](https://github.com/SycthePlays/Breathability), a team
 hackathon app that ranks Jakarta routes by air quality. This repo asks a narrower question on
 my own: **if a model learns Jakarta's air from 2024, how well does it predict the official 2025
 measurements?**
