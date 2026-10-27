@@ -1,70 +1,95 @@
 # Jakarta PM2.5: 2024 heatmap + predicting 2025
 
-**Live:** [2024 heatmap](https://bhreadz.github.io/jakarta-pm25-forecast/outputs/heatmap_2024.html) ·
+Live pages: [2024 heatmap](https://bhreadz.github.io/jakarta-pm25-forecast/outputs/heatmap_2024.html) ·
 [2025 official vs predicted](https://bhreadz.github.io/jakarta-pm25-forecast/outputs/heatmap_2025_compare.html) ·
 [model comparison chart](https://bhreadz.github.io/jakarta-pm25-forecast/outputs/model_comparison.png)
 
-A solo continuation of [Breathability](https://github.com/SycthePlays/Breathability), a team
-hackathon app that ranks Jakarta routes by air quality. This repo asks a narrower question on
-my own: **if a model learns Jakarta's air from 2024, how well does it predict the official 2025
-measurements?**
+I built [Breathability](https://github.com/SycthePlays/Breathability) with a team at a hackathon.
+It's an app that picks the route through Jakarta with the cleanest air. This repo is me taking one
+piece of that further on my own. The question is simple: if a model only learns from Jakarta's air
+in 2024, how close can it get to what the official monitors actually measured in 2025?
 
-- `outputs/heatmap_2024.html`: daily US AQI across Jakarta, with a day slider (green = good, red = bad)
-- `outputs/heatmap_2025_compare.html`: official 2025 vs model-predicted 2025, side by side, same slider
-- `outputs/model_comparison.png`, `outputs/results.csv`: error and accuracy for every model
+There are two heatmaps with a day slider, where green means clean air and red means bad air. The
+first shows 2024. The second puts the official 2025 readings next to what the model predicted, so
+you can slide through the year and see where it gets things wrong. The scores for every model are
+in `outputs/results.csv` and in the chart.
 
-## Results (trained on 2024, tested on all of 2025 that has data)
+## Results
 
-| Task | Model | MAE (ug/m3) | RMSE | R² | AQI category correct |
+Every model here was trained on 2024 and tested on the 2025 days that have data.
+
+| Task | Model | MAE (µg/m³) | RMSE | R² | AQI category correct |
 |---|---|---|---|---|---|
-| **A: weather only** | Climatology (baseline) | 10.8 | 13.5 | 0.05 | 66% |
+| A: weather only | Climatology (baseline) | 10.8 | 13.5 | 0.05 | 66% |
 | | Ridge (linear) | 10.6 | 13.3 | 0.08 | 62% |
 | | Random Forest | 10.7 | 13.4 | 0.08 | 63% |
-| | LightGBM | **10.5** | 13.3 | 0.09 | 63% |
-| **B: next day** | Climatology (baseline) | 10.8 | 13.6 | 0.04 | 65% |
-| | Persistence "tomorrow = today" (baseline) | 7.7 | 10.2 | 0.46 | 70% |
+| | LightGBM | 10.5 | 13.3 | 0.09 | 63% |
+| B: next day | Climatology (baseline) | 10.8 | 13.6 | 0.04 | 65% |
+| | Persistence, "tomorrow = today" (baseline) | 7.7 | 10.2 | 0.46 | 70% |
 | | Ridge (linear) | 8.0 | 10.1 | 0.48 | 70% |
-| | Random Forest | **7.3** | 9.4 | 0.55 | 70% |
+| | Random Forest | 7.3 | 9.4 | 0.55 | 70% |
 | | LightGBM | 8.5 | 10.8 | 0.40 | 65% |
 
-What this says, plainly:
-- **Weather alone barely beats "use last year's average for this month".** The best model gains
-  0.3 ug/m3 over climatology and gets the AQI category right *less* often. Daily weather from a
-  ~25 km reanalysis grid doesn't explain most of what happens at street level in Jakarta.
-- **Knowing yesterday matters much more than any model.** Persistence alone cuts the error by
-  ~30%. Random Forest adds a small further gain (7.7 → 7.3); LightGBM did worse than persistence.
-- "Within one AQI category" is ~99% for every model, including baselines. It is not a useful
-  metric here, because almost every day is Moderate or Unhealthy for Sensitive Groups.
-- Per-month errors are in `outputs/monthly_mae.csv`. For the weather-only models they swing a
-  lot, from ~6-8 ug/m3 in Jan and Sep 2025 up to ~16 in Oct 2025.
+The weather-only models barely did better than just guessing last year's average for that month.
+LightGBM, the best of them, was 0.3 µg/m³ closer than that guess, and it actually got the AQI
+category right less often. I think the reason is that the weather data comes from a grid about
+25 km wide, and that's way too coarse to explain what's happening on a Jakarta street.
+
+Knowing yesterday's reading helped a lot more than any model did. Just saying "tomorrow will be
+the same as today" cut the error by about 30%. Random Forest squeezed out a bit more (7.7 down to
+7.3). LightGBM ended up worse than that simple guess.
+
+I also tracked "within one AQI category", but every model scores about 99% on it, baselines
+included. Almost every day in Jakarta is either Moderate or Unhealthy for Sensitive Groups, so
+being one category off is hard to avoid being right about.
+
+The errors also jump around a lot by month (`outputs/monthly_mae.csv`). For the weather-only
+models they go from about 6 to 8 µg/m³ in January and September 2025 up to about 16 in October.
 
 ## The two tasks
-- **Task A (main): "PM2.5 given the weather."** Features: daily temperature, humidity, rain
-  (today + yesterday), pressure, wind speed and direction (as u/v), day of week, season, station.
-  No past PM2.5. It uses *observed* 2025 weather, so it is not a real forecast.
-- **Task B: next day.** Task A features + the measured PM2.5 of the previous 2 days.
 
-## Method
-- **Target:** daily mean PM2.5 from the two US Embassy monitors (Jakarta Central, Jakarta South),
-  via the AirNow archive. Real sensors, not a model product.
-- **Split strictly by time:** fit on 2024, score on 2025. Hyperparameters were chosen with
-  4-fold expanding-window cross-validation inside 2024 only; 2025 was never used for tuning.
-- **AQI:** US EPA PM2.5 breakpoints as revised in May 2024 (Good = 0-9.0 ug/m3), applied to
-  24-hour means, which is what they are defined for. Table in `src/aqi.py`.
-- **Heatmap:** each grid cell (0.01°, ~1 km) is an inverse-distance-weighted average of the
-  stations reporting that day. **With only two stations, everything between them is an estimate**,
-  and on days with one station the whole map takes that station's value. The grey dots are
-  Breathability's district list (`Breathability_v2/lib/jakartaAreas.js`); hover for the estimate.
+Task A is the main one: predict PM2.5 from the weather. The model gets daily temperature,
+humidity, rain from that day and the day before, air pressure, wind speed and direction, day of
+the week, time of year, and which station it is. It never sees any past PM2.5. It does use the
+real 2025 weather, though, so this isn't a true forecast. It's more like "given this weather,
+what should the air have been?"
 
-## Limitations (honest list)
-- Only **2 stations** have a usable 2024 and 2025 record. Jakarta Central stops in April 2025, and
-  both stop in early November 2025. Test set = 391 station-days.
-- Open-Meteo has no boundary-layer height for Jan-Jun 2024, so that feature (important for
-  pollution) is left out.
-- Both stations sit in nearly the same weather-grid cell, so they get almost identical weather.
-- Sources I tried that didn't work are listed in `data/SOURCES.md`.
+Task B predicts the next day. It gets everything from Task A plus the measured PM2.5 from the
+two days before.
+
+## How I did it
+
+The thing being predicted is the daily average PM2.5 from the two US Embassy monitors, Jakarta
+Central and Jakarta South, which I downloaded from the AirNow archive. I wanted real sensor
+readings, not another model's estimate.
+
+I split by time: train on 2024, test on 2025. If you shuffle the days randomly instead, the model
+gets to peek at the future and the scores look better than they really are. I picked the settings
+for each model using cross-validation inside 2024 only (4 folds, each one training on earlier
+months and checking on later ones), so 2025 stayed untouched until the final test.
+
+To turn PM2.5 into AQI I used the US EPA breakpoints from the May 2024 update, where "Good" now
+ends at 9.0 µg/m³. Those breakpoints are meant for 24-hour averages, which is exactly what I have.
+The full table is in `src/aqi.py`.
+
+For the heatmap, each grid square (about 1 km) is a weighted average of the stations that
+reported that day, with closer stations counting more. With only two stations, almost all of the
+map is an estimate. On days when only one station reported, the whole map is just that one value.
+The grey dots are the districts from Breathability (`Breathability_v2/lib/jakartaAreas.js`), and
+you can hover over them to see the estimate for each one.
+
+## Limitations
+
+Only 2 stations had usable data for both years. Jakarta Central goes quiet in April 2025, and
+both stop in early November 2025, which leaves 391 station-days to test on. Open-Meteo also has no
+boundary-layer height for January to June 2024. That's a big deal for pollution, since it's
+basically how high up the dirty air can spread, but with half the training year missing I had to
+leave it out. The two stations are also close enough that they fall in nearly the same weather
+grid square, so they get almost the same weather. The data sources I tried that didn't work out
+are in `data/SOURCES.md`.
 
 ## Run it
+
 ```bash
 pip install -r requirements.txt
 cd src
@@ -74,9 +99,13 @@ python train_eval.py        # models + outputs/results.csv + chart
 python make_heatmap.py      # needs ../Breathability_v2 next to this repo for the district dots
 python aqi.py               # self-check of the AQI table
 ```
-`forecast.py` is an earlier experiment (hourly, 1-24 h ahead, one station) and is not part of this pipeline.
+
+`forecast.py` is an older experiment (hourly, 1 to 24 hours ahead, one station). It isn't part of
+this pipeline.
 
 ## Data credits
-- PM2.5: U.S. Department of State Jakarta monitors via AirNow (files.airnowtech.org).
-- Weather: [Open-Meteo](https://open-meteo.com/) Historical Weather API, CC BY 4.0
-  (ERA5 reanalysis, Copernicus Climate Change Service).
+
+PM2.5 comes from the U.S. Department of State monitors in Jakarta, through AirNow
+(files.airnowtech.org). Weather comes from the [Open-Meteo](https://open-meteo.com/) Historical
+Weather API, CC BY 4.0, which is built on ERA5 reanalysis from the Copernicus Climate Change
+Service.
