@@ -60,8 +60,7 @@ two days before.
 ## How I did it
 
 The thing being predicted is the daily average PM2.5 from the two US Embassy monitors, Jakarta
-Central and Jakarta South, which I downloaded from the AirNow archive. I wanted real sensor
-readings, not another model's estimate.
+Central and Jakarta South, which I downloaded from the AirNow archive. 
 
 I split by time: train on 2024, test on 2025. If you shuffle the days randomly instead, the model
 gets to peek at the future and the scores look better than they really are. I picked the settings
