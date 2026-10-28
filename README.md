@@ -72,8 +72,10 @@ To turn PM2.5 into AQI I used the US EPA breakpoints from the May 2024 update, w
 ends at 9.0 µg/m³. Those breakpoints are meant for 24-hour averages, which is exactly what I have.
 The full table is in `src/aqi.py`.
 
-For the heatmap, each grid square (about 1 km) is a weighted average of the stations that
-reported that day, with closer stations counting more. With only two stations, almost all of the
+For the heatmap, I split the area into squares about 550 m wide. Each one is a weighted average of
+the stations that reported that day, with closer stations counting more. The colours are drawn
+as a see-through layer over a street map so you can tell where things are, and the map blends
+neighbouring squares into a smooth gradient. With only two stations, almost all of the
 map is an estimate. On days when only one station reported, the whole map is just that one value.
 The grey dots are the districts from Breathability (`Breathability_v2/lib/jakartaAreas.js`), and
 you can hover over them to see the estimate for each one.
@@ -108,4 +110,4 @@ this pipeline.
 PM2.5 comes from the U.S. Department of State monitors in Jakarta, through AirNow
 (files.airnowtech.org). Weather comes from the [Open-Meteo](https://open-meteo.com/) Historical
 Weather API, CC BY 4.0, which is built on ERA5 reanalysis from the Copernicus Climate Change
-Service.
+Service. The street map under the heatmaps is © OpenStreetMap contributors, styled by CARTO.
