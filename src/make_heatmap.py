@@ -20,7 +20,7 @@ import plotly.graph_objects as go
 from matplotlib.colors import LinearSegmentedColormap
 from plotly.subplots import make_subplots
 
-from aqi import BREAKPOINTS, COLORS, pm25_to_aqi
+from aqi import COLORS, pm25_to_aqi
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "outputs"
@@ -32,15 +32,11 @@ CENTER = dict(lat=(LAT[0] + LAT[-1]) / 2, lon=(LON[0] + LON[-1]) / 2)
 # Image corners (top-left, top-right, bottom-right, bottom-left) as [lon, lat].
 CORNERS = [[LON[0], LAT[-1]], [LON[-1], LAT[-1]], [LON[-1], LAT[0]], [LON[0], LAT[0]]]
 
-# Fixed colour scale for every frame (otherwise colours would mean different things on
-# different days). Smooth gradient: each AQI band's colour sits at the middle of its band
-# (Good = green at AQI 25, Moderate = yellow at 75, ...) and blends into the next.
-ZMAX = 300
-edges = [0] + [b[3] for b in BREAKPOINTS[:5]]          # 0, 50, 100, 150, 200, 300
-mids = [(lo + hi) / 2 for lo, hi in zip(edges[:-1], edges[1:])]
-SCALE = [[0, COLORS[0]]] + [[m / ZMAX, c] for m, c in zip(mids, COLORS)] + [[1, COLORS[4]]]
+# Colour scale: green -> yellow -> orange -> red, stretched between the lowest and highest
+# AQI on that page (see build). One range per page, not per day, so a colour means the same
+# AQI on every day of the slider and in both panels. The colour bar shows the actual numbers.
+SCALE = [[i / 3, c] for i, c in enumerate(COLORS[:4])]
 CMAP = LinearSegmentedColormap.from_list("aqi", [(f, c) for f, c in SCALE])
-COLORBAR = dict(title="US AQI", tickvals=edges, len=0.8)
 
 # Breathability districts inside the box (parsed straight from the app's JS file).
 js = (ROOT.parent / "Breathability_v2" / "lib" / "jakartaAreas.js").read_text(encoding="utf-8")
@@ -56,10 +52,11 @@ def idw(lats, lons, values, qlat, qlon, power=2):
     return (w * values).sum(-1) / w.sum(-1)
 
 
-def to_png(aqi_grid):
+def to_png(aqi_grid, lo, hi):
     """Grid of AQI values -> small PNG (as a data URI) the map draws over the streets.
+    lo/hi = AQI at the two ends of the colour scale.
     Row 0 of an image is the top, i.e. the northernmost latitude, so flip it."""
-    rgba = CMAP(np.flipud(aqi_grid) / ZMAX)
+    rgba = CMAP((np.flipud(aqi_grid) - lo) / (hi - lo))
     rgba[..., 3] *= EDGE_FADE          # soft edges instead of a hard rectangle
     buf = io.BytesIO()
     plt.imsave(buf, rgba, format="png")
@@ -76,7 +73,7 @@ def image_layer(png):
     return dict(sourcetype="image", source=png, coordinates=CORNERS, opacity=0.6, below="traces")
 
 
-def day_frame(day_rows, col, map_id, first=True):
+def day_frame(day_rows, col, map_id, rng, first=True):
     """Colour image + district dots + station markers for one day and one value column.
     Frames (first=False) only carry what changes from day to day."""
     r = day_rows.dropna(subset=[col])
@@ -84,7 +81,7 @@ def day_frame(day_rows, col, map_id, first=True):
         png, area_aqi, st_aqi = BLANK, np.full(len(areas), np.nan), []
     else:
         args = r["lat"].to_numpy(), r["lon"].to_numpy(), r[col].to_numpy()
-        png = to_png(pm25_to_aqi(idw(*args, GLAT, GLON)))
+        png = to_png(pm25_to_aqi(idw(*args, GLAT, GLON)), *rng)
         area_aqi = pm25_to_aqi(idw(*args, areas["lat"].to_numpy(), areas["lon"].to_numpy()))
         st_aqi = pm25_to_aqi(r[col])
     area_text = [f"{n}: est. AQI {a:.0f}" for n, a in zip(areas["name"], area_aqi)]
@@ -102,7 +99,7 @@ def day_frame(day_rows, col, map_id, first=True):
     ], image_layer(png)
 
 
-BLANK = to_png(np.full(GLAT.shape, np.nan))  # NaN -> fully transparent
+BLANK = to_png(np.full(GLAT.shape, np.nan), 0, 1)  # NaN -> fully transparent
 
 
 def build(df, panels, title, path):
@@ -113,23 +110,29 @@ def build(df, panels, title, path):
     by_day = dict(tuple(df.groupby("date")))
     map_ids = ["map" if i == 0 else f"map{i + 1}" for i in range(len(panels))]
     zoom = 10.4 if len(panels) == 1 else 9.7
+    # Lowest/highest AQI anywhere on this page. IDW only averages stations, so no grid
+    # cell can fall outside the station values.
+    aqi = pm25_to_aqi(df[[c for c, _ in panels]].to_numpy())
+    rng = (np.nanmin(aqi), np.nanmax(aqi))
+    print(f"  colour range: AQI {rng[0]:.0f} to {rng[1]:.0f}")
 
     maps = {}
     for (col, _), m in zip(panels, map_ids):
-        traces, layer = day_frame(by_day[dates[0]], col, m)
+        traces, layer = day_frame(by_day[dates[0]], col, m, rng)
         fig.add_traces(traces)
         maps[m] = dict(style="carto-positron", center=CENTER, zoom=zoom, layers=[layer])
     # The image has no colour bar of its own, so an invisible point carries the legend.
     fig.add_trace(go.Scattermap(lat=[CENTER["lat"]], lon=[CENTER["lon"]], mode="markers",
-                                marker=dict(size=0, opacity=0, color=[0], colorscale=SCALE, cmin=0,
-                                            cmax=ZMAX, showscale=True, colorbar=COLORBAR),
+                                marker=dict(size=0, opacity=0, color=[0], colorscale=SCALE, cmin=rng[0],
+                                            cmax=rng[1], showscale=True,
+                                            colorbar=dict(title="US AQI", len=0.8)),
                                 hoverinfo="skip", showlegend=False))
 
     frames = []
     for d in dates:
         data, layout = [], {}
         for (col, _), m in zip(panels, map_ids):
-            traces, layer = day_frame(by_day[d], col, m, first=False)
+            traces, layer = day_frame(by_day[d], col, m, rng, first=False)
             data += traces
             layout[m] = dict(layers=[layer])
         frames.append(go.Frame(name=f"{pd.Timestamp(d):%Y-%m-%d}", data=data,

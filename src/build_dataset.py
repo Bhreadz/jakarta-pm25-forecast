@@ -29,13 +29,18 @@ pm = pm.drop_duplicates(["station", "date"])[["station", "date", "pm25"]]
 
 n_raw = len(pm)
 bad = (pm["pm25"] < 0) | (pm["pm25"] > 500)  # sentinels (-999) and impossible values
+# Near-zero daily mean = sensor fault, not clean air. Jakarta South reads 0.0-2.0 on
+# 18-20 Oct 2024 (Jakarta Central: 23-45, no rain) and 4-6 Oct 2025 (20-43 either side).
+# The lowest believable day is 2.8 (18 Dec 2024, rainy season, Central also low at 6.4).
+near_zero = pm["pm25"].between(0, 2.5)
 # Flat-lined sensor: identical value 3+ days running at one station = stuck, not real.
 same = pm.sort_values("date").groupby("station")["pm25"].transform(
     lambda s: s.groupby((s != s.shift()).cumsum()).transform("size"))
 stuck = same.reindex(pm.index) >= 3
-pm = pm[~bad & ~stuck]
-print(f"PM2.5 rows: {n_raw} raw, dropped {bad.sum()} out-of-range + {stuck.sum()} flat-lined "
-      f"({(bad | stuck).mean():.1%})")
+drop = bad | near_zero | stuck
+pm = pm[~drop]
+print(f"PM2.5 rows: {n_raw} raw, dropped {bad.sum()} out-of-range + {near_zero.sum()} near-zero "
+      f"+ {stuck.sum()} flat-lined ({drop.mean():.1%})")
 
 # Full station x day grid so missing days show up as NaN rows (not silently absent).
 days = pd.date_range("2024-01-01", "2025-12-31")
