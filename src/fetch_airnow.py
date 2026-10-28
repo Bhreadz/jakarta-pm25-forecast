@@ -1,4 +1,4 @@
-"""Download US Embassy Jakarta PM2.5 daily means (2024-2025) from the AirNow archive.
+"""Download US Embassy Jakarta PM2.5 daily means (2020-2025) from the AirNow archive.
 
 AirNow publishes one `daily_data.dat` per day covering every monitor worldwide
 (~460 KB). We download each day, keep only the Jakarta rows, and save them
@@ -33,9 +33,9 @@ def jakarta_rows(day):
 done = set()
 if OUT.exists():  # resume: skip days already saved
     done = {line.split("|")[0] for line in OUT.read_text().splitlines()}
-todo = [d for d in pd.date_range("2024-01-01", "2025-12-31") if d.strftime("%m/%d/%y") not in done]
+todo = [d for d in pd.date_range("2020-01-01", "2025-12-31") if d.strftime("%m/%d/%y") not in done]
 
-# 8 downloads at a time: one-by-one takes ~1 hour for 731 files.
+# 8 downloads at a time: one-by-one takes ~4 s per file, hours for 6 years.
 with OUT.open("a") as f, ThreadPoolExecutor(8) as pool:
     for day, rows in zip(todo, pool.map(jakarta_rows, todo)):
         f.write("".join(l + "\n" for l in rows))

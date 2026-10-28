@@ -7,7 +7,7 @@ Live pages: [2024 heatmap](https://bhreadz.github.io/jakarta-pm25-forecast/outpu
 I built [Breathability](https://github.com/SycthePlays/Breathability) with a team at a hackathon.
 It's an app that picks the route through Jakarta with the cleanest air. This repo is me taking one
 piece of that further on my own. The question is simple: if a model only learns from Jakarta's air
-in 2024, how close can it get to what the official monitors actually measured in 2025?
+from 2020 to 2024, how close can it get to what the official monitors actually measured in 2025?
 
 There are two heatmaps with a day slider, where green means clean air and red means bad air. The
 first shows 2024. The second puts the official 2025 readings next to what the model predicted, so
@@ -16,35 +16,39 @@ in `outputs/results.csv` and in the chart.
 
 ## Results
 
-Every model here was trained on 2024 and tested on the 2025 days that have data.
+Every model here was trained on 2020–2024 (about 3,200 station-days) and tested on the 2025 days
+that have data.
 
 | Task | Model | MAE (µg/m³) | RMSE | R² | AQI category correct |
 |---|---|---|---|---|---|
-| A: weather only | Climatology (baseline) | 10.8 | 13.4 | 0.05 | 66% |
-| | Ridge (linear) | 10.7 | 13.1 | 0.10 | 59% |
-| | Random Forest | 10.6 | 13.0 | 0.11 | 64% |
-| | LightGBM | 10.3 | 13.0 | 0.11 | 63% |
-| B: next day | Climatology (baseline) | 10.7 | 13.3 | 0.07 | 66% |
+| A: weather only | Climatology (baseline) | 10.0 | 12.4 | 0.19 | 67% |
+| | Ridge (linear) | 11.0 | 12.9 | 0.12 | 60% |
+| | Random Forest | 10.1 | 12.1 | 0.23 | 61% |
+| | LightGBM | 10.0 | 12.1 | 0.23 | 63% |
+| B: next day | Climatology (baseline) | 10.0 | 12.4 | 0.19 | 67% |
 | | Persistence, "tomorrow = today" (baseline) | 7.6 | 10.1 | 0.46 | 70% |
-| | Ridge (linear) | 7.8 | 9.8 | 0.49 | 70% |
-| | Random Forest | 7.2 | 9.0 | 0.57 | 72% |
-| | LightGBM | 7.6 | 9.6 | 0.52 | 69% |
+| | Ridge (linear) | 7.8 | 9.5 | 0.52 | 70% |
+| | Random Forest | 7.1 | 8.9 | 0.58 | 69% |
+| | LightGBM | 7.2 | 9.0 | 0.58 | 73% |
 
-The weather-only models barely did better than just guessing last year's average for that month.
-LightGBM, the best of them, was about 0.6 µg/m³ closer than that guess, and it actually got the AQI
-category right less often. I think the reason is that the weather data comes from a grid about
+The weather-only models did no better than just guessing the 2020–2024 average for that month.
+LightGBM, the best of them, tied that guess (both 10.0 µg/m³), and it got the AQI category right
+less often (63% vs 67%). Ridge was clearly worse. Going from one year of training to five helped
+the simple average more than the models: when I trained on 2024 alone, the average's error was
+10.8 and LightGBM's was 10.3. I think the reason is that the weather data comes from a grid about
 25 km wide, and that's way too coarse to explain what's happening on a Jakarta street.
 
 Knowing yesterday's reading helped a lot more than any model did. Just saying "tomorrow will be
-the same as today" cut the error by about 30%. Random Forest squeezed out a bit more (7.6 down to
-7.2). LightGBM only tied that simple guess, and Ridge did slightly worse.
+the same as today" cut the error by about a quarter (10.0 down to 7.6). Random Forest and LightGBM
+squeezed out a bit more (7.1 and 7.2), and LightGBM got the AQI category right most often of
+anything (73%). Ridge did slightly worse than the simple guess.
 
-I also tracked "within one AQI category", but every model scores 98% or more on it, baselines
+I also tracked "within one AQI category", but every model scores 99% or more on it, baselines
 included. Almost every day in Jakarta is either Moderate or Unhealthy for Sensitive Groups, so
 being one category off is hard to avoid being right about.
 
 The errors also jump around a lot by month (`outputs/monthly_mae.csv`). For the weather-only
-models they go from about 6 to 7 µg/m³ in January 2025 up to 11 to 15 in August and October.
+models they go from about 8 µg/m³ in January and May 2025 up to 13 to 15 in April.
 
 ## The two tasks
 
@@ -60,15 +64,15 @@ two days before.
 ## How I did it
 
 The thing being predicted is the daily average PM2.5 from the two US Embassy monitors, Jakarta
-Central and Jakarta South, which I downloaded from the AirNow archive. I dropped 6 days where
-Jakarta South read almost zero (0.0 to 2.0 µg/m³ on 18–20 Oct 2024 and 4–6 Oct 2025). Jakarta's
-air is never that clean, and on the 2024 dates Jakarta Central read 23 to 45 with no rain, so
-those were sensor faults.
+Central and Jakarta South, which I downloaded from the AirNow archive. I dropped 9 days where
+Jakarta South read zero, below zero or almost zero (−3.0 to 2.0 µg/m³, in Sep 2020, Oct 2023,
+Oct 2024 and Oct 2025). Jakarta's air is never that clean, and on the 2024 dates Jakarta Central
+read 23 to 45 with no rain, so those were sensor faults.
 
-I split by time: train on 2024, test on 2025. If you shuffle the days randomly instead, the model
+I split by time: train on 2020–2024, test on 2025. If you shuffle the days randomly instead, the model
 gets to peek at the future and the scores look better than they really are. I picked the settings
-for each model using cross-validation inside 2024 only (4 folds, each one training on earlier
-months and checking on later ones), so 2025 stayed untouched until the final test.
+for each model using cross-validation inside 2020–2024 only (4 folds, each one training on
+earlier data and checking on what came after), so 2025 stayed untouched until the final test.
 
 To turn PM2.5 into AQI I used the US EPA breakpoints from the May 2024 update, where "Good" now
 ends at 9.0 µg/m³. Those breakpoints are meant for 24-hour averages, which is exactly what I have.
@@ -87,11 +91,11 @@ you can hover over them to see the estimate for each one.
 
 ## Limitations
 
-Only 2 stations had usable data for both years. Jakarta Central goes quiet in April 2025, and
+Only 2 stations had usable data for 2020–2025. Jakarta Central goes quiet in April 2025, and
 both stop in early November 2025, which leaves 388 station-days to test on. Open-Meteo also has no
 boundary-layer height for January to June 2024. That's a big deal for pollution, since it's
-basically how high up the dirty air can spread, but with half the training year missing I had to
-leave it out. The two stations are also close enough that they fall in nearly the same weather
+basically how high up the dirty air can spread, but Ridge and Random Forest can't handle
+missing values, so I left it out. The two stations are also close enough that they fall in nearly the same weather
 grid square, so they get almost the same weather. The data sources I tried that didn't work out
 are in `data/SOURCES.md`.
 

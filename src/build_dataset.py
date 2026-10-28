@@ -1,6 +1,6 @@
 """Clean + join station PM2.5 with weather -> data/processed/dataset.parquet.
 
-One row per station-day (WIB local date), 2024-01-01 .. 2025-12-31.
+One row per station-day (WIB local date), 2020-01-01 .. 2025-12-31.
 Run src/fetch_airnow.py first. Weather is pulled here from Open-Meteo
 (cached in data/raw/ so we only download once).
 """
@@ -43,7 +43,7 @@ print(f"PM2.5 rows: {n_raw} raw, dropped {bad.sum()} out-of-range + {near_zero.s
       f"+ {stuck.sum()} flat-lined ({drop.mean():.1%})")
 
 # Full station x day grid so missing days show up as NaN rows (not silently absent).
-days = pd.date_range("2024-01-01", "2025-12-31")
+days = pd.date_range("2020-01-01", "2025-12-31")
 grid = pd.MultiIndex.from_product([list(STATIONS), days], names=["station", "date"])
 df = pm.set_index(["station", "date"]).reindex(grid).reset_index()
 
@@ -53,10 +53,10 @@ HOURLY = ["temperature_2m", "relative_humidity_2m", "precipitation", "surface_pr
 
 
 def weather_for(name, lat, lon):
-    path = RAW / f"openmeteo_{name.replace(' ', '_')}.csv"
+    path = RAW / f"openmeteo_{name.replace(' ', '_')}_2020-2025.csv"
     if not path.exists():
         r = requests.get("https://archive-api.open-meteo.com/v1/archive", timeout=120, params={
-            "latitude": lat, "longitude": lon, "start_date": "2024-01-01", "end_date": "2025-12-31",
+            "latitude": lat, "longitude": lon, "start_date": "2020-01-01", "end_date": "2025-12-31",
             "hourly": ",".join(HOURLY), "timezone": "Asia/Jakarta"})
         r.raise_for_status()
         pd.DataFrame(r.json()["hourly"]).to_csv(path, index=False)

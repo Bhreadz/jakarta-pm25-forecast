@@ -172,6 +172,6 @@ if __name__ == "__main__":
     # Keep every 2025 day on the slider, including days a station had no official value.
     base = data[data["date"].dt.year == 2025][["station", "date", "lat", "lon", "pm25"]]
     comp = base.merge(pred[["station", "date", best]], on=["station", "date"], how="left")
-    build(comp, [("pm25", "Official 2025 (measured)"), (best, f"Predicted: {best}, trained on 2024")],
+    build(comp, [("pm25", "Official 2025 (measured)"), (best, f"Predicted: {best}, trained on 2020-2024")],
           f"2025: official vs predicted (Task A, weather only) - best model by MAE: {best}",
           OUT / "heatmap_2025_compare.html")

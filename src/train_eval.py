@@ -1,11 +1,11 @@
-"""Train on 2024, score on 2025. Two tasks, kept separate:
+"""Train on 2020-2024, score on 2025. Two tasks, kept separate:
 
 Task A  "PM2.5 given the weather": weather + calendar + station, NO past PM2.5.
         Uses *observed* 2025 weather, so it is not a true forecast.
 Task B  "next-day": Task A features + yesterday's measured PM2.5.
 
 2025 is never seen during fitting or tuning. Hyperparameters are picked with
-expanding-window cross-validation inside 2024 only (TimeSeriesSplit).
+expanding-window cross-validation inside 2020-2024 only (TimeSeriesSplit).
 Outputs: outputs/results.csv, outputs/monthly_mae.csv,
          outputs/predictions_2025.parquet, outputs/model_comparison.png
 """
@@ -42,7 +42,7 @@ df["pm_yesterday"] = g.shift(1)
 df["pm_2days_ago"] = g.shift(2)
 
 # boundary_layer_height is left out on purpose: Open-Meteo has none for Jan-Jun 2024,
-# so using it would throw away half the training year.
+# and Ridge / Random Forest can't handle missing values.
 WEATHER = ["temperature_2m", "relative_humidity_2m", "precipitation", "rain_prev_day",
            "surface_pressure", "wind_speed_10m", "wind_u", "wind_v"]
 CALENDAR = ["day_of_week", "season_sin", "season_cos", "is_south"]
@@ -70,12 +70,12 @@ results, monthly, preds = [], [], []
 for task, feats in TASKS.items():
     # Rows need a measured target and (Task B) measured lags; weather is complete.
     d = df.dropna(subset=["pm25"] + feats)
-    train, test = d[d["date"].dt.year == 2024], d[d["date"].dt.year == 2025]
-    print(f"\n=== {task}: {len(train)} train days (2024), {len(test)} test days (2025) ===")
+    train, test = d[d["date"].dt.year <= 2024], d[d["date"].dt.year == 2025]
+    print(f"\n=== {task}: {len(train)} train days (2020-2024), {len(test)} test days (2025) ===")
 
     out = test[["station", "date", "month", "lat", "lon", "pm25"]].copy()
-    # Baseline 1, climatology: "the average for this station in this month of 2024".
-    clim = train.groupby(["station", "month"])["pm25"].mean().rename("Climatology (2024 monthly mean)")
+    # Baseline 1, climatology: "the 2020-2024 average for this station in this month".
+    clim = train.groupby(["station", "month"])["pm25"].mean().rename("Climatology (2020-24 monthly mean)")
     out = out.join(clim, on=["station", "month"])
     # Baseline 2, persistence: "tomorrow = today" (only meaningful when yesterday is known).
     if "pm_yesterday" in feats:
@@ -115,6 +115,6 @@ for ax, (task, r) in zip(axes, res.groupby("task", sort=False)):
     ax.set_xlim(0, res["MAE"].max() * 1.6)
     ax.set_xlabel("Mean absolute error on 2025, ug/m3 (lower = better)")
     ax.spines[["top", "right"]].set_visible(False)
-fig.suptitle("Trained on 2024, tested on 2025 - Jakarta US Embassy PM2.5 (grey = baseline)")
+fig.suptitle("Trained on 2020-2024, tested on 2025 - Jakarta US Embassy PM2.5 (grey = baseline)")
 fig.savefig(OUT / "model_comparison.png", dpi=150)
 print(f"\nSaved results to {OUT}")
