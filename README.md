@@ -38,6 +38,13 @@ the simple average more than the models: when I trained on 2024 alone, the avera
 10.8 and LightGBM's was 10.3. I think the reason is that the weather data comes from a grid about
 25 km wide, and that's way too coarse to explain what's happening on a Jakarta street.
 
+I also tried going back further, training on 2016–2024 (about 5,900 station-days, since the
+monitors start in 2016). It made things worse: the monthly average's error went from 10.0 to 11.0
+and weather-only LightGBM's from 10.0 to 10.3. Jakarta's air was dirtier back then (yearly averages
+of 41, 30, 41 and 46 µg/m³ for 2016–2019, against 29 in 2025), so the models learned to expect
+around 38 and overshot 2025 by about 8. More data only helps if the past looks like the future.
+That's why the results above use 2020–2024.
+
 Knowing yesterday's reading helped a lot more than any model did. Just saying "tomorrow will be
 the same as today" cut the error by about a quarter (10.0 down to 7.6). Random Forest and LightGBM
 squeezed out a bit more (7.1 and 7.2), and LightGBM got the AQI category right most often of
