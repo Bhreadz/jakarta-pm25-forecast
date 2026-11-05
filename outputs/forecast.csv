@@ -1,0 +1,15 @@
+date,station,predicted_pm25,cams_pm25,predicted_aqi,predicted_category
+2026-11-04,Jakarta Central,42.8,66.9,119.0,Unhealthy for Sensitive Groups
+2026-11-04,Jakarta South,45.5,115.8,125.0,Unhealthy for Sensitive Groups
+2026-11-05,Jakarta Central,39.5,70.9,111.0,Unhealthy for Sensitive Groups
+2026-11-05,Jakarta South,38.4,134.8,108.0,Unhealthy for Sensitive Groups
+2026-11-06,Jakarta Central,38.9,57.8,109.0,Unhealthy for Sensitive Groups
+2026-11-06,Jakarta South,38.7,124.2,109.0,Unhealthy for Sensitive Groups
+2026-11-07,Jakarta Central,40.3,65.8,113.0,Unhealthy for Sensitive Groups
+2026-11-07,Jakarta South,40.6,115.5,113.0,Unhealthy for Sensitive Groups
+2026-11-08,Jakarta Central,42.8,,119.0,Unhealthy for Sensitive Groups
+2026-11-08,Jakarta South,43.4,,120.0,Unhealthy for Sensitive Groups
+2026-11-09,Jakarta Central,37.8,,107.0,Unhealthy for Sensitive Groups
+2026-11-09,Jakarta South,36.5,,103.0,Unhealthy for Sensitive Groups
+2026-11-10,Jakarta Central,39.6,,111.0,Unhealthy for Sensitive Groups
+2026-11-10,Jakarta South,37.2,,105.0,Unhealthy for Sensitive Groups

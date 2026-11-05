@@ -1,7 +1,7 @@
 # Jakarta PM2.5: 2024 heatmap + predicting 2025
 
 Live pages: [2024 heatmap](https://bhreadz.github.io/jakarta-pm25-forecast/outputs/heatmap_2024.html) ·
-[2025 official vs predicted](https://bhreadz.github.io/jakarta-pm25-forecast/outputs/heatmap_2025_compare.html) ·
+[2025 official vs all 3 models](https://bhreadz.github.io/jakarta-pm25-forecast/outputs/heatmap_2025_compare.html) ·
 [model comparison chart](https://bhreadz.github.io/jakarta-pm25-forecast/outputs/model_comparison.png)
 
 I built [Breathability](https://github.com/SycthePlays/Breathability) with a team at a hackathon.
@@ -10,8 +10,9 @@ piece of that further on my own. The question is simple: if a model only learns 
 from 2020 to 2024, how close can it get to what the official monitors actually measured in 2025?
 
 There are two heatmaps with a day slider, where green means clean air and red means bad air. The
-first shows 2024. The second puts the official 2025 readings next to what the model predicted, so
-you can slide through the year and see where it gets things wrong. The scores for every model are
+first shows 2024. The second shows four maps at once on one slider: the official 2025 readings and
+what each of the three weather-only models predicted, so you can slide through the year and see
+where each one gets things wrong. The scores for every model are
 in `outputs/results.csv` and in the chart.
 
 ## Results
@@ -96,6 +97,15 @@ map is an estimate. On days when only one station reported, the whole map is jus
 The grey dots are the districts from Breathability (`Breathability_v2/lib/jakartaAreas.js`), and
 you can hover over them to see the estimate for each one.
 
+## Predicting the next week
+
+`src/predict_tomorrow.py` makes a real forecast. It trains the weather-only LightGBM on every
+measured day (2020 to Nov 2025), downloads Open-Meteo's weather forecast for the next 7 days at
+both monitors, and predicts PM2.5 for each day. Next to it, it shows the CAMS forecast for the
+same days, which is what Breathability uses. It can only use the weather-only model, because the
+Embassy monitors stopped reporting in November 2025, so there's no "yesterday" reading to give the
+next-day model. For the same reason there's nothing to check the forecast against yet.
+
 ## Limitations
 
 Only 2 stations had usable data for 2020–2025. Jakarta Central goes quiet in April 2025, and
@@ -113,10 +123,16 @@ pip install -r requirements.txt
 cd src
 python fetch_airnow.py      # a few minutes, downloads 731 daily AirNow files, keeps Jakarta rows
 python build_dataset.py     # weather + cleaning -> data/processed/dataset.parquet
+python export_csv.py        # -> data/train_2020_2024.csv + data/test_2025.csv (for the notebook)
 python train_eval.py        # models + outputs/results.csv + chart
 python make_heatmap.py      # needs ../Breathability_v2 next to this repo for the district dots
+python predict_tomorrow.py  # forecast the next 7 days -> outputs/forecast.csv
 python aqi.py               # self-check of the AQI table
 ```
+
+To train the models yourself step by step, open `train_models.ipynb` (`pip install notebook`, then
+`jupyter notebook`). It reads `data/train_2020_2024.csv` and `data/test_2025.csv`, which are the
+exact tables the results above come from, so running it gives the same numbers.
 
 `forecast.py` is an older experiment (hourly, 1 to 24 hours ahead, one station). It isn't part of
 this pipeline.

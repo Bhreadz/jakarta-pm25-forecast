@@ -1,10 +1,3 @@
-"""Jakarta PM2.5 forecaster: persistence + CAMS baselines vs LightGBM, 1-24 h ahead.
-
-Run:  python forecast.py          (or cell-by-cell in VS Code via the # %% markers)
-Set OPENAQ_API_KEY to train on real station data; without it the target falls
-back to Open-Meteo's CAMS PM2.5 so the pipeline still runs end to end.
-"""
-# %% Config
 import os
 import time
 from datetime import date, timedelta
@@ -15,21 +8,17 @@ import numpy as np
 import pandas as pd
 import requests
 
-LAT, LON = -6.2088, 106.8456          # central Jakarta
+LAT, LON = -6.2088, 106.8456
 START = "2023-01-01"
 END = (date.today() - timedelta(days=2)).isoformat()
 HORIZONS = [1, 3, 6, 12, 24]
-# Jakarta South, ~75% hourly coverage 2022-10 -> 2025-11. Longest-span pick
-# (None) chose Jakarta Central, which is ~83% empty after 2023 -- check coverage.
 STATION_ID = 5077558
 DATA = Path(__file__).parent / "data"
 DATA.mkdir(exist_ok=True)
 
-# US EPA 2024 PM2.5 breakpoints (ug/m3). They're 24 h-average breakpoints applied
-# to hourly values -- an approximation, say so in the write-up.
 BREAKS = [9.0, 35.4, 55.4, 125.4, 225.4]
 CATS = ["Good", "Moderate", "Unhealthy (sensitive)", "Unhealthy", "Very unhealthy", "Hazardous"]
-SENSITIVE = 35.4                      # above this = bad hour for asthma users
+SENSITIVE = 35.4
 
 
 def cached(name, fetch):
@@ -41,7 +30,6 @@ def cached(name, fetch):
     return df
 
 
-# %% Data: OpenAQ station PM2.5
 def fetch_openaq(key):
     s = requests.Session()
     s.headers["X-API-Key"] = key
@@ -63,7 +51,6 @@ def fetch_openaq(key):
             print(f"  sensor {sid:>8}  {name:<35} {f} -> {l}")
         sensor = cands[0][1]
 
-    # 30-day windows (<= 720 rows, one page each) -- deep paging 500s on OpenAQ.
     rows = []
     edges = pd.date_range(START, END, freq="30D").append(pd.DatetimeIndex([END]))
     for a, b in zip(edges[:-1], edges[1:]):
@@ -77,13 +64,12 @@ def fetch_openaq(key):
         r.raise_for_status()
         rows += [(m["period"]["datetimeFrom"]["utc"], m["value"]) for m in r.json()["results"]]
         print(f"  {a:%Y-%m-%d}: {len(rows)} hours so far", end="\r")
-        time.sleep(1.1)               # free tier: 60 req/min
+        time.sleep(1.1)
     df = pd.DataFrame(rows, columns=["time", "pm25"])
     df["time"] = pd.to_datetime(df["time"], utc=True).dt.tz_localize(None).dt.floor("h")
     return df.groupby("time").mean()
 
 
-# %% Data: Open-Meteo weather + CAMS PM2.5 (no key)
 def fetch_open_meteo(url, variables):
     r = requests.get(url, params={"latitude": LAT, "longitude": LON, "start_date": START,
                                   "end_date": END, "hourly": ",".join(variables), "timezone": "GMT"},
@@ -108,15 +94,13 @@ else:
           "Fine for testing the pipeline, not for the write-up.")
     pm = cams.copy()
 
-# %% Clean: hourly grid, drop impossible values, causal gap fill
 idx = pd.date_range(max(pm.index.min(), weather.index.min()), min(pm.index.max(), weather.index.max()), freq="h")
 pm = pm.reindex(idx)
-pm[(pm < 0) | (pm > 500)] = np.nan    # sensor glitches
+pm[(pm < 0) | (pm > 500)] = np.nan
 print(f"{len(idx)} hours, {pm.isna().mean():.1%} missing PM2.5")
-pm_filled = pm.ffill(limit=3)         # forward-only: never peeks at the future
+pm_filled = pm.ffill(limit=3)
 weather = weather.reindex(idx).ffill(limit=3)
 
-# %% Features: everything known at issue time t
 X = pd.DataFrame(index=idx)
 for lag in [0, 1, 2, 3, 6, 12, 24]:
     X[f"pm_lag{lag}"] = pm_filled.shift(lag)
@@ -129,27 +113,23 @@ for v in WEATHER_VARS:
 rad = np.deg2rad(weather["wind_direction_10m"])
 X["wind_u"], X["wind_v"] = np.sin(rad), np.cos(rad)
 X["rain_24h"] = weather["precipitation"].rolling(24, min_periods=1).sum()
-# ponytail: weather is observed at t, not forecast for t+h -- feed Open-Meteo
-# historical *forecasts* for the target hour if long horizons plateau.
 
 
 def calendar(ts):
     wib = ts + pd.Timedelta(hours=7)
     return pd.DataFrame({"hour": wib.hour, "weekday": wib.weekday, "month": wib.month,
                          "dry_season": wib.month.isin([5, 6, 7, 8, 9, 10]).astype(int)}, index=ts)
-# ponytail: no holiday/Ramadan flags yet -- add with the `holidays` package (country "ID").
 
 
 def category(v):
-    return np.digitize(v, BREAKS, right=True)   # int codes 0-5, no pd.cut dtype surprises
+    return np.digitize(v, BREAKS, right=True)
 
 
-# %% Train + evaluate per horizon (time split, last 20% = test)
 results = []
 for h in HORIZONS:
     target_time = idx + pd.Timedelta(hours=h)
     df = X.join(calendar(target_time).set_axis(idx).add_prefix("tgt_"))
-    df["y"] = pm.shift(-h)            # raw target: imputed values never graded
+    df["y"] = pm.shift(-h)
     df["persistence"] = X["pm_lag0"]
     df["cams"] = cams.reindex(target_time).to_numpy()
     df = df.dropna(subset=["y", "pm_lag0"])
@@ -160,7 +140,7 @@ for h in HORIZONS:
 
     model = lgb.LGBMRegressor(n_estimators=600, learning_rate=0.03, num_leaves=31,
                               subsample=0.8, subsample_freq=1, colsample_bytree=0.8, verbose=-1)
-    val = train.index >= train.index[int(len(train) * 0.85)]   # early stopping on the tail of train
+    val = train.index >= train.index[int(len(train) * 0.85)]
     model.fit(train.loc[~val, feats], train.loc[~val, "y"],
               eval_X=train.loc[val, feats], eval_y=train.loc[val, "y"],
               callbacks=[lgb.early_stopping(50, verbose=False)])
@@ -172,7 +152,7 @@ for h in HORIZONS:
         p = test[name].to_numpy()
         ok = ~np.isnan(p)
         if not key and name == "cams":
-            continue                  # CAMS is the target in fallback mode -- meaningless
+            continue
         results.append({
             "horizon_h": h, "model": name,
             "MAE": np.abs(p[ok] - y[ok]).mean(),
@@ -186,5 +166,4 @@ print(f"\nTest period: {cut:%Y-%m-%d} -> {idx[-1]:%Y-%m-%d}   ({(pm.loc[cut:] > 
 print(res.pivot(index="horizon_h", columns="model", values=["MAE", "bad_recall"]).round(2).to_string())
 res.to_csv(DATA / "results.csv", index=False)
 
-# %% Self-check: category mapping matches EPA breakpoints
 assert list(category(np.array([0, 9.0, 9.1, 35.4, 35.5, 55.5, 300]))) == [0, 0, 1, 1, 2, 3, 5]

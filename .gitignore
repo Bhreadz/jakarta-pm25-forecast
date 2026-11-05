@@ -1,4 +1,7 @@
 data/*
 !data/SOURCES.md
+!data/train_2020_2024.csv
+!data/test_2025.csv
 __pycache__/
 .venv/
+.ipynb_checkpoints/

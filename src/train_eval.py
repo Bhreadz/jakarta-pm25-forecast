@@ -1,14 +1,3 @@
-"""Train on 2020-2024, score on 2025. Two tasks, kept separate:
-
-Task A  "PM2.5 given the weather": weather + calendar + station, NO past PM2.5.
-        Uses *observed* 2025 weather, so it is not a true forecast.
-Task B  "next-day": Task A features + yesterday's measured PM2.5.
-
-2025 is never seen during fitting or tuning. Hyperparameters are picked with
-expanding-window cross-validation inside 2020-2024 only (TimeSeriesSplit).
-Outputs: outputs/results.csv, outputs/monthly_mae.csv,
-         outputs/predictions_2025.parquet, outputs/model_comparison.png
-"""
 from pathlib import Path
 
 import lightgbm as lgb
@@ -31,18 +20,15 @@ SEED = 0
 
 df = pd.read_parquet(ROOT / "data" / "processed" / "dataset.parquet").sort_values(["date", "station"])
 
-# --- Features ---
-df["day_of_week"] = df["date"].dt.dayofweek          # weekday traffic vs weekend
+df["day_of_week"] = df["date"].dt.dayofweek
 df["month"] = df["date"].dt.month
-doy = 2 * np.pi * df["date"].dt.dayofyear / 365.25   # season as a circle: Dec 31 sits next to Jan 1
+doy = 2 * np.pi * df["date"].dt.dayofyear / 365.25
 df["season_sin"], df["season_cos"] = np.sin(doy), np.cos(doy)
 df["is_south"] = (df["station"] == "Jakarta South").astype(int)
 g = df.groupby("station")["pm25"]
 df["pm_yesterday"] = g.shift(1)
 df["pm_2days_ago"] = g.shift(2)
 
-# boundary_layer_height is left out on purpose: Open-Meteo has none for Jan-Jun 2024,
-# and Ridge / Random Forest can't handle missing values.
 WEATHER = ["temperature_2m", "relative_humidity_2m", "precipitation", "rain_prev_day",
            "surface_pressure", "wind_speed_10m", "wind_u", "wind_v"]
 CALENDAR = ["day_of_week", "season_sin", "season_cos", "is_south"]
@@ -68,16 +54,13 @@ def score(y, p):
 
 results, monthly, preds = [], [], []
 for task, feats in TASKS.items():
-    # Rows need a measured target and (Task B) measured lags; weather is complete.
     d = df.dropna(subset=["pm25"] + feats)
     train, test = d[d["date"].dt.year <= 2024], d[d["date"].dt.year == 2025]
     print(f"\n=== {task}: {len(train)} train days (2020-2024), {len(test)} test days (2025) ===")
 
     out = test[["station", "date", "month", "lat", "lon", "pm25"]].copy()
-    # Baseline 1, climatology: "the 2020-2024 average for this station in this month".
     clim = train.groupby(["station", "month"])["pm25"].mean().rename("Climatology (2020-24 monthly mean)")
     out = out.join(clim, on=["station", "month"])
-    # Baseline 2, persistence: "tomorrow = today" (only meaningful when yesterday is known).
     if "pm_yesterday" in feats:
         out["Persistence (yesterday)"] = test["pm_yesterday"]
 
@@ -102,7 +85,6 @@ pd.concat(preds).to_parquet(OUT / "predictions_2025.parquet", index=False)
 pd.set_option("display.width", 160)
 print("\n", res.round(3).to_string(index=False))
 
-# --- One summary chart: MAE per model, per task (lower is better) ---
 fig, axes = plt.subplots(1, 2, figsize=(14, 4.5), layout="constrained")
 for ax, (task, r) in zip(axes, res.groupby("task", sort=False)):
     r = r.sort_values("MAE", ascending=False)
