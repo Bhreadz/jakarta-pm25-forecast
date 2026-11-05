@@ -98,11 +98,6 @@ def build(df, panels, title, path=None):
         traces, layer = day_frame(by_day[dates[0]], col, m, rng)
         fig.add_traces(traces)
         maps[m] = dict(style="carto-positron", center=CENTER, zoom=zoom, layers=[layer])
-    fig.add_trace(go.Scattermap(lat=[CENTER["lat"]], lon=[CENTER["lon"]], mode="markers",
-                                marker=dict(size=0, opacity=0, color=[0], colorscale=SCALE, cmin=rng[0],
-                                            cmax=rng[1], showscale=True,
-                                            colorbar=dict(title="US AQI", len=0.8)),
-                                hoverinfo="skip", showlegend=False))
 
     frames = []
     for d in dates:

@@ -92,7 +92,7 @@ as a see-through layer over a street map so you can tell where things are, and t
 neighbouring squares into a smooth gradient. The colours go from green to red across the
 lowest and highest AQI on that page (16 to 170 for 2024, 21 to 166 for 2025). That makes small
 differences easier to see, but it means the colours don't match the official AQI band colours,
-so check the colour bar for the actual number. With only two stations, almost all of the
+so check the number next to each monitor for the actual AQI. With only two stations, almost all of the
 map is an estimate. On days when only one station reported, the whole map is just that one value.
 The grey dots are the districts from Breathability (`Breathability_v2/lib/jakartaAreas.js`), and
 you can hover over them to see the estimate for each one.
